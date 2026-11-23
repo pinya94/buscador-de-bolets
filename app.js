@@ -286,10 +286,11 @@
   // Color de la capa de calor (amarillo -> naranja -> rojo -> granate)
   const STOPS = [
     [0.0, [255, 230, 80, 0]],
-    [0.3, [255, 220, 70, 90]],
-    [0.55, [255, 150, 40, 160]],
-    [0.75, [224, 50, 42, 200]],
-    [1.0, [142, 14, 59, 225]]
+    [0.4, [255, 230, 80, 0]],
+    [0.55, [255, 215, 60, 110]],
+    [0.7, [255, 145, 35, 170]],
+    [0.85, [224, 45, 40, 210]],
+    [1.0, [128, 10, 60, 235]]
   ];
   function heatColor(v) {
     for (let i = 1; i < STOPS.length; i++) {
@@ -350,7 +351,7 @@
         if (isNaN(h)) continue;
         const t = terrainAt(grid, N, i + PAD, j + PAD, k, mpp);
         const s = score(sp, cls, h, t.slope, t.northness, fr.dens[gi]);
-        if (s < 0.12) continue;
+        if (s < 0.4) continue;
         const c = heatColor(s);
         const p = (j * 256 + i) * 4;
         o[p] = c[0]; o[p + 1] = c[1]; o[p + 2] = c[2]; o[p + 3] = c[3];
