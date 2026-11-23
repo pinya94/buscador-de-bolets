@@ -282,6 +282,26 @@
     } catch (e) { return null; }
   }
 
+
+  // Color de la capa de calor (amarillo -> naranja -> rojo -> granate)
+  const STOPS = [
+    [0.0, [255, 230, 80, 0]],
+    [0.3, [255, 220, 70, 90]],
+    [0.55, [255, 150, 40, 160]],
+    [0.75, [224, 50, 42, 200]],
+    [1.0, [142, 14, 59, 225]]
+  ];
+  function heatColor(v) {
+    for (let i = 1; i < STOPS.length; i++) {
+      if (v <= STOPS[i][0]) {
+        const [a, ca] = STOPS[i - 1], [b, cb] = STOPS[i];
+        const t = (v - a) / (b - a);
+        return [lerp(ca[0], cb[0], t), lerp(ca[1], cb[1], t), lerp(ca[2], cb[2], t), lerp(ca[3], cb[3], t)];
+      }
+    }
+    return STOPS[STOPS.length - 1][1];
+  }
+
   // ---------------------------------------------------------------
   // 6. Mapa y capas
   // ---------------------------------------------------------------
