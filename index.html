@@ -38,7 +38,7 @@
     <div class="layers">
       <label><input type="checkbox" id="lyrHeat" checked /> Probabilidad de setas</label>
       <label><input type="checkbox" id="lyrAspect" /> Obagas / solanas</label>
-      <label><input type="checkbox" id="lyrForest" /> Contorno de bosques</label>
+      <label><input type="checkbox" id="lyrForest" /> Mapa de bosques (ICGC)</label>
     </div>
     <div class="legend">
       <span>Baja</span><div class="grad"></div><span>Alta</span>
@@ -59,14 +59,14 @@
       <h2>¿Cómo funciona?</h2>
       <p>Para cada punto del mapa la app combina:</p>
       <ul>
-        <li><b>Bosque</b> (OpenStreetMap): si hay bosque y de qué tipo (pinos/coníferas, hayas/robles, mixto).</li>
+        <li><b>Bosque</b> (Mapa de Cubiertas del Suelo del ICGC, 2024): si hay bosque y de qué tipo (pinar, hayedo/robledal, encinar) y si es denso o claro.</li>
         <li><b>Orientación</b>: las <b>obagas</b> (laderas mirando al norte) guardan más humedad.</li>
         <li><b>Pendiente</b>: las pendientes muy fuertes puntúan menos.</li>
         <li><b>Altitud</b>: cada seta tiene su franja.</li>
         <li><b>Lluvia</b> de los últimos 21 días (Open-Meteo) para saber si es buen momento.</li>
       </ul>
       <p>Las zonas en <b>rojo intenso</b> son las más favorables para la seta elegida. Toca cualquier punto para ver el detalle y guardarlo.</p>
-      <p class="muted">Datos: © OpenStreetMap, ICGC, Mapzen/AWS Terrain Tiles, Open-Meteo.</p>
+      <p class="muted">Datos: © ICGC (mapa base y cubiertas del suelo), AWS Terrain Tiles, Open-Meteo, OpenTopoMap. Funciona dentro de Cataluña.</p>
       <button id="btnCloseInfo" class="primary">Entendido</button>
     </div>
   </div>

@@ -8,7 +8,7 @@ App web sencilla para buscar zonas con probabilidad de setas en Cataluña.
 
 Para cada punto del mapa combina:
 
-- **Bosque** (OpenStreetMap): si hay bosque y de qué tipo (coníferas, planifolios, mixto).
+- **Bosque** (Mapa de Cobertes del Sòl del ICGC, 2024): pinar, hayedo/robledal o encinar, denso o claro.
 - **Orientación**: las obagas (laderas que miran al norte) puntúan más.
 - **Pendiente**: las muy fuertes puntúan menos.
 - **Altitud**: cada seta tiene su franja.
@@ -21,7 +21,7 @@ También puedes guardar "mis rincones" (se guardan en el propio móvil/navegador
 ## Cómo se usa
 
 1. Abre el enlace (mejor en el móvil).
-2. Haz zoom en una zona boscosa (a partir de zoom 12 se calcula sola).
+2. Haz zoom en una zona boscosa (a partir de zoom 11 se calcula sola).
 3. Elige la seta. Rojo intenso = zona más favorable.
 4. Toca un punto para ver altitud, pendiente, orientación y tipo de bosque.
 
@@ -31,7 +31,7 @@ HTML + JS sin compilación (Leaflet). Todo se calcula en el navegador:
 
 - Mapa base: ICGC (topográfico y ortofoto), OpenTopoMap.
 - Relieve: AWS Terrain Tiles (formato terrarium).
-- Bosques: API Overpass de OpenStreetMap.
+- Bosques: WMS Cobertes del Sòl (ICGC), leído píxel a píxel.
 - Tiempo: Open-Meteo.
 
 Es orientativo. Nunca comas una seta sin identificarla al 100% y respeta la normativa de cada zona.

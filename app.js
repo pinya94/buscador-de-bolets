@@ -1,5 +1,5 @@
 /* Buscador de Bolets — mapa de zonas favorables para setas en Cataluña
- * Combina: bosques (OpenStreetMap/Overpass) + relieve (AWS Terrain Tiles)
+ * Combina: bosques (Mapa de Cobertes del Sòl, ICGC) + relieve (AWS Terrain Tiles)
  *          + lluvia reciente (Open-Meteo). Todo se calcula en el navegador.
  */
 (() => {
@@ -8,45 +8,45 @@
   // ---------------------------------------------------------------
   // 1. Perfiles de setas (valores orientativos)
   // ---------------------------------------------------------------
-  // arboles: afinidad con con=coníferas (pinos), bro=planifolios (hayas, robles),
-  //          mix=bosque mixto, unk=bosque sin tipo conocido
+  // arboles: afinidad con con=coníferas (pinos), bro=caducifolios (hayas, robles),
+  //          esc=esclerófilos (encinas, alcornoques)
   // alt: [mínimo, óptimo desde, óptimo hasta, máximo] en metros
   // obaga: 0..1, cuánto le importa que la ladera mire al norte
   // meses: temporada principal (1 = enero)
   const SPECIES = [
     {
       id: 'rovello', nombre: 'Rovelló', alias: 'Níscalo', latin: 'Lactarius deliciosus / sanguifluus',
-      arboles: { con: 1, mix: 0.8, bro: 0.1, unk: 0.55 }, alt: [0, 250, 1300, 1800], obaga: 0.5,
+      arboles: { con: 1, bro: 0.1, esc: 0.05 }, alt: [0, 250, 1300, 1800], obaga: 0.5,
       meses: [9, 10, 11, 12],
       nota: 'Bajo pinos, en claros y márgenes de pinar con hierba corta.'
     },
     {
       id: 'cep', nombre: 'Cep', alias: 'Boleto', latin: 'Boletus edulis / pinophilus / aereus',
-      arboles: { con: 0.85, mix: 1, bro: 0.9, unk: 0.6 }, alt: [300, 800, 1800, 2100], obaga: 0.45,
+      arboles: { con: 0.85, bro: 1, esc: 0.6 }, alt: [300, 800, 1800, 2100], obaga: 0.45,
       meses: [8, 9, 10, 11],
-      nota: 'Pinares de montaña, hayedos y robledales. Le gusta el calor húmedo tras tormentas.'
+      nota: 'Pinares de montaña, hayedos y robledales (el cep negro, también en encinares). Le gusta el calor húmedo tras tormentas.'
     },
     {
       id: 'camagroc', nombre: 'Camagroc', alias: 'Angula de monte', latin: 'Craterellus lutescens',
-      arboles: { con: 1, mix: 0.85, bro: 0.4, unk: 0.55 }, alt: [200, 500, 1300, 1600], obaga: 0.85,
+      arboles: { con: 1, bro: 0.45, esc: 0.3 }, alt: [200, 500, 1300, 1600], obaga: 0.85,
       meses: [10, 11, 12, 1],
       nota: 'Obagas muy húmedas, entre musgo y cerca de regueros. Sale en grupos.'
     },
     {
       id: 'rossinyol', nombre: 'Rossinyol', alias: 'Rebozuelo', latin: 'Cantharellus cibarius',
-      arboles: { con: 0.7, mix: 1, bro: 0.9, unk: 0.6 }, alt: [200, 500, 1400, 1800], obaga: 0.6,
+      arboles: { con: 0.7, bro: 1, esc: 0.6 }, alt: [200, 500, 1400, 1800], obaga: 0.6,
       meses: [6, 7, 8, 9, 10, 11],
-      nota: 'Bosques mixtos y de robles/hayas, suelos ácidos y con musgo.'
+      nota: 'Robledales, hayedos y encinares con musgo, en suelos ácidos.'
     },
     {
       id: 'llenega', nombre: 'Llenega negra', alias: 'Babosa', latin: 'Hygrophorus latitatus',
-      arboles: { con: 1, mix: 0.7, bro: 0.05, unk: 0.5 }, alt: [900, 1200, 1900, 2200], obaga: 0.6,
+      arboles: { con: 1, bro: 0.05, esc: 0 }, alt: [900, 1200, 1900, 2200], obaga: 0.6,
       meses: [10, 11, 12],
       nota: 'Pinares de pino rojo y pino negro, en zonas altas del Pirineo y Prepirineo.'
     },
     {
       id: 'fredolic', nombre: 'Fredolic', alias: 'Negrilla', latin: 'Tricholoma terreum',
-      arboles: { con: 1, mix: 0.7, bro: 0.1, unk: 0.5 }, alt: [0, 200, 1100, 1500], obaga: 0.3,
+      arboles: { con: 1, bro: 0.1, esc: 0.1 }, alt: [0, 200, 1100, 1500], obaga: 0.3,
       meses: [11, 12, 1],
       nota: 'Pinares, a final de temporada, cuando ya hace frío.'
     }
@@ -114,9 +114,9 @@
     const n = slopeDeg < 3 ? 0.6 : northness; // en llano la orientación casi no cuenta
     return (1 - w) + w * n;
   }
-  function score(sp, cls, h, slopeDeg, northness) {
+  function score(sp, cls, h, slopeDeg, northness, dens = 1) {
     if (!cls) return 0;
-    const t = sp.arboles[cls] || 0;
+    const t = (sp.arboles[cls] || 0) * dens;
     if (t <= 0) return 0;
     return t * altFactor(h, sp.alt) * slopeFactor(slopeDeg) * aspectFactor(northness, slopeDeg, sp.obaga);
   }
@@ -204,183 +204,82 @@
   }
 
   // ---------------------------------------------------------------
-  // 5. Bosques: OpenStreetMap vía Overpass
+  // 5. Bosques: Mapa de Cobertes del Sòl de Catalunya (ICGC, 2024)
   // ---------------------------------------------------------------
-  const forests = [];            // {id, cls, bbox:[s,w,n,e], rings:[[ [lat,lon]... ]], desc}
-  const forestIds = new Set();
-  const loadedBoxes = [];        // zonas ya descargadas [s,w,n,e]
-  let loading = false;
+  // Se pide al WMS del ICGC una imagen exactamente alineada con cada tile
+  // del mapa y se lee el color de cada píxel para saber el tipo de bosque.
+  const COB_WMS = 'https://geoserveis.icgc.cat/servei/catalunya/cobertes-sol/wms';
+  const COB_LAYER = 'cobertes_2024';
+  // color de la leyenda -> [tipo, densidad]
+  const COB_COLORS = {
+    '51,204,51': ['con', 1],     // Boscos densos d'aciculifolis (pinos, abetos)
+    '25,230,30': ['con', 0.85],  // Boscos clars d'aciculifolis
+    '102,255,51': ['bro', 1],    // Boscos densos de caducifolis (hayas, robles, castaños)
+    '180,255,155': ['bro', 0.85],// Boscos clars de caducifolis
+    '104,144,24': ['esc', 1],    // Boscos densos d'esclerofil·les (encinas, alcornoques)
+    '170,165,0': ['esc', 0.85],  // Boscos clars d'esclerofil·les
+    '0,255,155': ['bro', 0.6]    // Bosc de ribera
+  };
+  const CLS_IDX = { con: 1, bro: 2, esc: 3 };
+  const IDX_CLS = [null, 'con', 'bro', 'esc'];
+  const CLS_TXT = { con: 'Coníferas (pinos, abetos)', bro: 'Caducifolios (hayas, robles…)', esc: 'Encinar / alcornocal' };
 
-  const OVERPASS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter'
-  ];
+  const R = 6378137;
+  const mercX = (lon) => R * lon * Math.PI / 180;
+  const mercY = (lat) => R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
 
-  function classify(t) {
-    const lt = t.leaf_type || '';
-    const w = t.wood || '';
-    const g = [t.genus, t.species, t.taxon, t['species:es'], t['species:ca'], t['genus:ca'], t['genus:es']]
-      .filter(Boolean).join(' ').toLowerCase();
-    if (lt === 'needleleaved' || w === 'coniferous' || /pinus|abies|picea|larix|pino|\bpi\b|avet|conif/.test(g)) return 'con';
-    if (lt === 'broadleaved' || w === 'deciduous' || /fagus|quercus|castanea|betula|haya|faig|roble|roure|alzina|encina|castany|bedoll/.test(g)) return 'bro';
-    if (lt === 'mixed' || w === 'mixed') return 'mix';
-    return 'unk';
-  }
-  const CLS_TXT = { con: 'Coníferas (pinos)', bro: 'Planifolios (hayas, robles…)', mix: 'Bosque mixto', unk: 'Bosque (tipo sin especificar)' };
-
-  // Une trozos de vía en anillos cerrados (para multipolígonos)
-  function stitch(segments) {
-    const rings = [];
-    const segs = segments.filter((s) => s.length > 1).map((s) => s.slice());
-    const same = (a, b) => Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
-    while (segs.length) {
-      let ring = segs.shift();
-      let guard = 0;
-      while (!same(ring[0], ring[ring.length - 1]) && guard++ < 5000) {
-        const end = ring[ring.length - 1];
-        const idx = segs.findIndex((s) => same(s[0], end) || same(s[s.length - 1], end));
-        if (idx < 0) break;
-        let s = segs.splice(idx, 1)[0];
-        if (!same(s[0], end)) s = s.reverse();
-        ring = ring.concat(s.slice(1));
-      }
-      if (ring.length > 3) rings.push(ring);
-    }
-    return rings;
-  }
-
-  function addForest(id, tags, rings) {
-    if (forestIds.has(id) || !rings.length) return;
-    forestIds.add(id);
-    let s = 90, w = 180, n = -90, e = -180;
-    for (const r of rings) for (const [la, lo] of r) {
-      if (la < s) s = la; if (la > n) n = la; if (lo < w) w = lo; if (lo > e) e = lo;
-    }
-    const cls = classify(tags);
-    const extra = [tags.name, tags.genus || tags.species || tags.taxon].filter(Boolean).join(' · ');
-    forests.push({ id, cls, bbox: [s, w, n, e], rings, desc: extra });
-  }
-
-  async function fetchForests(b) {
-    const bb = `${b[0].toFixed(5)},${b[1].toFixed(5)},${b[2].toFixed(5)},${b[3].toFixed(5)}`;
-    const q = `[out:json][timeout:60][bbox:${bb}];
-(
-  way["landuse"="forest"];
-  way["natural"="wood"];
-  way["landcover"="trees"];
-  relation["landuse"="forest"]["type"="multipolygon"];
-  relation["natural"="wood"]["type"="multipolygon"];
-);
-out tags geom;`;
-    let lastErr = null;
-    for (const url of OVERPASS) {
-      try {
-        const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
-        for (const el of data.elements || []) {
-          const tags = el.tags || {};
-          if (el.type === 'way' && el.geometry) {
-            const ring = el.geometry.map((p) => [p.lat, p.lon]);
-            addForest('w' + el.id, tags, [ring]);
-          } else if (el.type === 'relation' && el.members) {
-            const outer = [], inner = [];
-            for (const m of el.members) {
-              if (m.type !== 'way' || !m.geometry) continue;
-              const seg = m.geometry.map((p) => [p.lat, p.lon]);
-              (m.role === 'inner' ? inner : outer).push(seg);
-            }
-            addForest('r' + el.id, tags, stitch(outer).concat(stitch(inner)));
-          }
-        }
-        return true;
-      } catch (e) { lastErr = e; }
-    }
-    console.warn('Overpass falló', lastErr);
-    return false;
-  }
-
-  const covered = (b) => loadedBoxes.some((L) => b[0] >= L[0] && b[1] >= L[1] && b[2] <= L[2] && b[3] <= L[3]);
-
-  async function ensureForests() {
-    if (map.getZoom() < 12) {
-      status('Acércate más al mapa (zoom) para calcular las zonas de setas', 3500);
-      return;
-    }
-    const bnd = map.getBounds();
-    const view = [bnd.getSouth(), bnd.getWest(), bnd.getNorth(), bnd.getEast()];
-    if (covered(view) || loading) return;
-    const dLat = (view[2] - view[0]) * 0.25, dLon = (view[3] - view[1]) * 0.25;
-    const box = [view[0] - dLat, view[1] - dLon, view[2] + dLat, view[3] + dLon];
-    loading = true;
-    status('🌲 Buscando bosques en esta zona…');
-    const ok = await fetchForests(box);
-    loading = false;
-    if (ok) {
-      loadedBoxes.push(box);
-      status(`🍄 Zona analizada (${forests.length} bosques cargados)`, 2500);
-      heatLayer.redraw();
-      if (map.hasLayer(forestOutline)) drawOutlines();
-      // si el usuario se ha movido mientras cargaba, completa
-      setTimeout(ensureForests, 50);
-    } else {
-      status('No se han podido descargar los bosques (servidor ocupado). Prueba en unos segundos.', 5000);
-    }
-  }
-
-  // Rasteriza los bosques del tile en un canvas (R=coníferas, G=planifolios, R+G=mixto, B=desconocido)
-  function rasterForests(z, x, y, pad) {
+  // Devuelve { cls: Uint8Array(N*N), dens: Float32Array(N*N) } o null
+  const coverCache = new Map();
+  function coverGrid(z, x, y, pad) {
+    const key = z + '/' + x + '/' + y;
+    if (coverCache.has(key)) return coverCache.get(key);
     const N = 256 + 2 * pad;
     const ox = x * 256 - pad, oy = y * 256 - pad;
     const [nLat, wLon] = unproject(ox, oy, z);
     const [sLat, eLon] = unproject(ox + N, oy + N, z);
-    const list = forests.filter((f) => !(f.bbox[0] > nLat || f.bbox[2] < sLat || f.bbox[1] > eLon || f.bbox[3] < wLon));
-    if (!list.length) return null;
-    const c = document.createElement('canvas');
-    c.width = c.height = N;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.globalCompositeOperation = 'lighter';
-    const colors = { con: 'rgb(255,0,0)', bro: 'rgb(0,255,0)', mix: 'rgb(255,255,0)', unk: 'rgb(0,0,255)' };
-    for (const f of list) {
-      ctx.beginPath();
-      for (const r of f.rings) {
-        r.forEach(([la, lo], idx) => {
-          const [px, py] = project(la, lo, z);
-          if (idx === 0) ctx.moveTo(px - ox, py - oy); else ctx.lineTo(px - ox, py - oy);
-        });
-        ctx.closePath();
-      }
-      ctx.fillStyle = colors[f.cls];
-      ctx.fill('evenodd');
-    }
-    return ctx.getImageData(0, 0, N, N).data;
-  }
-  function clsFromPixel(d, idx) {
-    const r = d[idx] > 127, g = d[idx + 1] > 127, b = d[idx + 2] > 127;
-    if (r && g) return 'mix';
-    if (r) return 'con';
-    if (g) return 'bro';
-    if (b) return 'unk';
-    return null;
+    const bbox = [mercX(wLon), mercY(sLat), mercX(eLon), mercY(nLat)].join(',');
+    const url = `${COB_WMS}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${COB_LAYER}&STYLES=&SRS=EPSG:3857` +
+      `&BBOX=${bbox}&WIDTH=${N}&HEIGHT=${N}&FORMAT=image/png&TRANSPARENT=true`;
+    const p = new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = c.height = N;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, N, N).data;
+        const cls = new Uint8Array(N * N), dens = new Float32Array(N * N);
+        let any = false;
+        for (let i = 0; i < N * N; i++) {
+          if (d[i * 4 + 3] < 128) continue;
+          const hit = COB_COLORS[d[i * 4] + ',' + d[i * 4 + 1] + ',' + d[i * 4 + 2]];
+          if (hit) { cls[i] = CLS_IDX[hit[0]]; dens[i] = hit[1]; any = true; }
+        }
+        resolve(any ? { cls, dens } : null);
+      };
+      img.onerror = () => { coverCache.delete(key); resolve(null); };
+      img.src = url;
+    });
+    coverCache.set(key, p);
+    if (coverCache.size > 300) coverCache.delete(coverCache.keys().next().value);
+    return p;
   }
 
-  // Color de la capa de calor (amarillo -> naranja -> rojo -> granate)
-  const STOPS = [
-    [0.0, [255, 230, 80, 0]],
-    [0.3, [255, 220, 70, 90]],
-    [0.55, [255, 150, 40, 160]],
-    [0.75, [224, 50, 42, 200]],
-    [1.0, [142, 14, 59, 225]]
-  ];
-  function heatColor(v) {
-    for (let i = 1; i < STOPS.length; i++) {
-      if (v <= STOPS[i][0]) {
-        const [a, ca] = STOPS[i - 1], [b, cb] = STOPS[i];
-        const t = (v - a) / (b - a);
-        return [lerp(ca[0], cb[0], t), lerp(ca[1], cb[1], t), lerp(ca[2], cb[2], t), lerp(ca[3], cb[3], t)];
-      }
-    }
-    return STOPS[STOPS.length - 1][1];
+  // Tipo de cubierta en un punto (texto oficial del ICGC)
+  async function coverAt(lat, lon) {
+    const d = 0.0005;
+    const bbox = [mercX(lon - d), mercY(lat - d), mercX(lon + d), mercY(lat + d)].join(',');
+    const url = `${COB_WMS}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=${COB_LAYER}&QUERY_LAYERS=${COB_LAYER}` +
+      `&STYLES=&SRS=EPSG:3857&BBOX=${bbox}&WIDTH=11&HEIGHT=11&X=5&Y=5&INFO_FORMAT=text/plain`;
+    try {
+      const t = await (await fetch(url)).text();
+      const m = t.match(/class = '(.+?)'\s*red = '(\d+)'\s*green = '(\d+)'\s*blue = '(\d+)'/);
+      if (!m) return null;
+      const name = m[1].replace(/^[\d.]+\s*\(\d+\)\s*/, '');
+      const hit = COB_COLORS[m[2] + ',' + m[3] + ',' + m[4]];
+      return { name, cls: hit ? hit[0] : null, dens: hit ? hit[1] : 0 };
+    } catch (e) { return null; }
   }
 
   // ---------------------------------------------------------------
@@ -411,10 +310,10 @@ out tags geom;`;
     }
   });
   async function renderHeat(tile, { x, y, z }) {
-    if (z < 12) return;
-    const fr = rasterForests(z, x, y, PAD);
+    if (z < 11) return;
+    const [fr, dem] = await Promise.all([coverGrid(z, x, y, PAD), elevationGrid(z, x, y, PAD)]);
     if (!fr) return;
-    const { grid, N } = await elevationGrid(z, x, y, PAD);
+    const { grid, N } = dem;
     const [lat] = unproject(x * 256 + 128, y * 256 + 128, z);
     const mpp = metersPerPixel(lat, z);
     const k = clamp(Math.round(20 / mpp), 1, PAD); // ~20 m de separación para la pendiente
@@ -425,12 +324,12 @@ out tags geom;`;
     for (let j = 0; j < 256; j++) {
       for (let i = 0; i < 256; i++) {
         const gi = (j + PAD) * N + (i + PAD);
-        const cls = clsFromPixel(fr, gi * 4);
+        const cls = IDX_CLS[fr.cls[gi]];
         if (!cls) continue;
         const h = grid[gi];
         if (isNaN(h)) continue;
         const t = terrainAt(grid, N, i + PAD, j + PAD, k, mpp);
-        const s = score(sp, cls, h, t.slope, t.northness);
+        const s = score(sp, cls, h, t.slope, t.northness, fr.dens[gi]);
         if (s < 0.12) continue;
         const c = heatColor(s);
         const p = (j * 256 + i) * 4;
@@ -439,7 +338,7 @@ out tags geom;`;
     }
     ctx.putImageData(img, 0, 0);
   }
-  const heatLayer = new HeatLayer({ minZoom: 12, maxZoom: 19, zIndex: 400, updateWhenIdle: true, keepBuffer: 1 });
+  const heatLayer = new HeatLayer({ minZoom: 11, maxZoom: 19, zIndex: 400, updateWhenIdle: true, keepBuffer: 1 });
   heatLayer.addTo(map);
 
   // Capa de obagas / solanas
@@ -473,25 +372,16 @@ out tags geom;`;
   }
   const aspectLayer = new AspectLayer({ minZoom: 11, maxZoom: 19, zIndex: 350, updateWhenIdle: true });
 
-  // Contornos de bosques
-  const forestOutline = L.layerGroup();
-  const OUT_COL = { con: '#1f6b2a', bro: '#7a9a2a', mix: '#3f8a5a', unk: '#555' };
-  function drawOutlines() {
-    forestOutline.clearLayers();
-    const b = map.getBounds();
-    const s = b.getSouth(), w = b.getWest(), n = b.getNorth(), e = b.getEast();
-    let count = 0;
-    for (const f of forests) {
-      if (f.bbox[0] > n || f.bbox[2] < s || f.bbox[1] > e || f.bbox[3] < w) continue;
-      if (++count > 1500) break;
-      L.polygon(f.rings, { color: OUT_COL[f.cls], weight: 1.2, fill: false, interactive: false }).addTo(forestOutline);
-    }
-  }
+  // Mapa de bosques del ICGC (visual)
+  const forestOutline = L.tileLayer.wms(COB_WMS, {
+    layers: COB_LAYER, format: 'image/png', transparent: true, opacity: 0.45, zIndex: 300,
+    attribution: 'Cobertes del sòl © ICGC'
+  });
 
   $('lyrHeat').addEventListener('change', (e) => e.target.checked ? heatLayer.addTo(map) : map.removeLayer(heatLayer));
   $('lyrAspect').addEventListener('change', (e) => e.target.checked ? aspectLayer.addTo(map) : map.removeLayer(aspectLayer));
   $('lyrForest').addEventListener('change', (e) => {
-    if (e.target.checked) { drawOutlines(); forestOutline.addTo(map); } else map.removeLayer(forestOutline);
+    if (e.target.checked) forestOutline.addTo(map); else map.removeLayer(forestOutline);
   });
 
   // ---------------------------------------------------------------
@@ -591,23 +481,6 @@ out tags geom;`;
   // ---------------------------------------------------------------
   // 9. Tocar el mapa: detalle de un punto
   // ---------------------------------------------------------------
-  function pointInRings(lat, lon, rings) {
-    let inside = false;
-    for (const r of rings) {
-      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-        const [yi, xi] = r[i], [yj, xj] = r[j];
-        if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
-      }
-    }
-    return inside;
-  }
-  function forestAt(lat, lon) {
-    const hits = forests.filter((f) => lat >= f.bbox[0] && lat <= f.bbox[2] && lon >= f.bbox[1] && lon <= f.bbox[3] && pointInRings(lat, lon, f.rings));
-    if (!hits.length) return null;
-    const pref = ['mix', 'con', 'bro', 'unk'];
-    hits.sort((a, b) => pref.indexOf(a.cls) - pref.indexOf(b.cls));
-    return hits[0];
-  }
   const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
 
   async function pointInfo(lat, lon) {
@@ -625,19 +498,19 @@ out tags geom;`;
   map.on('click', async (e) => {
     const { lat, lng } = e.latlng;
     const pop = L.popup({ maxWidth: 280 }).setLatLng(e.latlng).setContent('<div class="pop">Calculando…</div>').openOn(map);
-    let info;
-    try { info = await pointInfo(lat, lng); } catch (err) { pop.setContent('<div class="pop">No hay datos de relieve aquí.</div>'); return; }
-    const analysed = loadedBoxes.some((b) => lat >= b[0] && lat <= b[2] && lng >= b[1] && lng <= b[3]);
-    const f = forestAt(lat, lng);
-    const cls = f ? f.cls : null;
+    let info, cov;
+    try { [info, cov] = await Promise.all([pointInfo(lat, lng), coverAt(lat, lng)]); }
+    catch (err) { pop.setContent('<div class="pop">No hay datos de relieve aquí.</div>'); return; }
+    const cls = cov ? cov.cls : null;
+    const dens = cov ? cov.dens : 0;
     const dir = DIRS[Math.round(info.aspect / 45) % 8];
     const ori = info.slope < 3 ? 'Llano' : `${dir} ${info.northness > 0.7 ? '(obaga)' : info.northness < 0.3 ? '(solana)' : ''}`;
-    const ranking = SPECIES.map((sp) => ({ sp, s: score(sp, cls, info.h, info.slope, info.northness) }))
+    const ranking = SPECIES.map((sp) => ({ sp, s: score(sp, cls, info.h, info.slope, info.northness, dens) }))
       .sort((a, b) => b.s - a.s);
-    const mine = Math.round(score(current, cls, info.h, info.slope, info.northness) * 100);
+    const mine = Math.round(score(current, cls, info.h, info.slope, info.northness, dens) * 100);
     const rows = ranking.map(({ sp, s }) =>
       `<tr><td>${sp.nombre}</td><td style="width:45%"><div class="bar"><div style="width:${Math.round(s * 100)}%"></div></div></td></tr>`).join('');
-    const bosque = !analysed ? '<i>zona sin analizar (acércate)</i>' : f ? CLS_TXT[cls] + (f.desc ? `<br><span class="muted">${f.desc}</span>` : '') : 'Sin bosque';
+    const bosque = !cov ? '<i>Sin datos (fuera de Cataluña)</i>' : cls ? CLS_TXT[cls] + `<br><span class="muted">${cov.name}</span>` : cov.name;
     pop.setContent(
       `<div class="pop">
         <h3>${current.nombre}: <span class="score">${mine}%</span></h3>
@@ -651,7 +524,6 @@ out tags geom;`;
         <button id="btnSave">⭐ Guardar rincón</button>
         <div class="btnrow">
           <a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lng.toFixed(6)}">🚗 Cómo llegar</a>
-          <a target="_blank" rel="noopener" href="https://www.instamaps.cat/geocatweb/visor.html#/${lat.toFixed(5)}/${lng.toFixed(5)}/16">🗺️ Instamaps</a>
         </div>
       </div>`
     );
@@ -711,9 +583,7 @@ out tags geom;`;
     store.set('bolets_view', { c: [c.lat, c.lng], z: map.getZoom() });
     clearTimeout(moveTimer);
     moveTimer = setTimeout(() => {
-      if (map.getZoom() >= 12) ensureForests();
-      else if (map.getZoom() >= 9) status('Haz zoom en una zona para ver dónde puede haber setas', 2500);
-      if (map.hasLayer(forestOutline)) drawOutlines();
+      if (map.getZoom() < 11 && map.getZoom() >= 8) status('Haz zoom en una zona para ver dónde puede haber setas', 2500);
     }, 600);
     updateWeatherSoon();
   });
@@ -740,10 +610,9 @@ out tags geom;`;
   $('panelHandle').onclick = () => $('panel').classList.toggle('collapsed');
 
   // Arranque
-  if (map.getZoom() >= 12) ensureForests();
   updateWeather();
-  if (map.getZoom() < 12) status('Haz zoom en una zona boscosa para ver dónde puede haber setas', 4000);
+  if (map.getZoom() < 11) status('Haz zoom en una zona boscosa para ver dónde puede haber setas', 4000);
 
   // Exponer para pruebas
-  window.__bolets = { score, terrainAt, stitch, classify, SPECIES, forests };
+  window.__bolets = { score, terrainAt, coverGrid, coverAt, pointInfo, SPECIES, map, heatLayer };
 })();
