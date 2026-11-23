@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Buscador de Bolets 🍄</title>
+  <meta name="theme-color" content="#2f4a2a" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍄</text></svg>" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">🍄 <span>Buscador de Bolets</span></div>
+    <div class="top-actions">
+      <button id="btnLocate" title="Mi ubicación">📍</button>
+      <button id="btnInfo" title="Cómo funciona">ℹ️</button>
+    </div>
+  </header>
+
+  <div id="map"></div>
+
+  <div id="status" class="hidden"></div>
+
+  <section id="panel">
+    <div class="handle" id="panelHandle"></div>
+
+    <div class="section-title">¿Qué buscas?</div>
+    <div id="species" class="chips"></div>
+    <div id="speciesInfo" class="species-info"></div>
+
+    <div class="section-title">Condiciones en esta zona</div>
+    <div id="weather" class="weather">
+      <div class="muted">Acércate a una zona del mapa para ver la lluvia de los últimos días.</div>
+    </div>
+
+    <div class="section-title">Capas</div>
+    <div class="layers">
+      <label><input type="checkbox" id="lyrHeat" checked /> Probabilidad de setas</label>
+      <label><input type="checkbox" id="lyrAspect" /> Obagas / solanas</label>
+      <label><input type="checkbox" id="lyrForest" /> Contorno de bosques</label>
+    </div>
+    <div class="legend">
+      <span>Baja</span><div class="grad"></div><span>Alta</span>
+    </div>
+
+    <div class="section-title">Mis rincones</div>
+    <div id="spots" class="spots"><div class="muted">Toca el mapa y pulsa «Guardar rincón».</div></div>
+
+    <p class="disclaimer">
+      Orientativo: calcula zonas favorables a partir del relieve, el tipo de bosque y la lluvia. No garantiza nada.
+      Nunca comas una seta que no tengas identificada al 100%. Respeta la normativa local
+      (algunas comarcas y fincas exigen permiso para recolectar) y la propiedad privada.
+    </p>
+  </section>
+
+  <div id="infoModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>¿Cómo funciona?</h2>
+      <p>Para cada punto del mapa la app combina:</p>
+      <ul>
+        <li><b>Bosque</b> (OpenStreetMap): si hay bosque y de qué tipo (pinos/coníferas, hayas/robles, mixto).</li>
+        <li><b>Orientación</b>: las <b>obagas</b> (laderas mirando al norte) guardan más humedad.</li>
+        <li><b>Pendiente</b>: las pendientes muy fuertes puntúan menos.</li>
+        <li><b>Altitud</b>: cada seta tiene su franja.</li>
+        <li><b>Lluvia</b> de los últimos 21 días (Open-Meteo) para saber si es buen momento.</li>
+      </ul>
+      <p>Las zonas en <b>rojo intenso</b> son las más favorables para la seta elegida. Toca cualquier punto para ver el detalle y guardarlo.</p>
+      <p class="muted">Datos: © OpenStreetMap, ICGC, Mapzen/AWS Terrain Tiles, Open-Meteo.</p>
+      <button id="btnCloseInfo" class="primary">Entendido</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
